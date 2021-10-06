@@ -1,0 +1,46 @@
+# Ref: https://minompi.medium.com/push-and-publish-docker-images-with-github-actions-1650dd965ba4
+
+name: Publish Docker Image on GitHub Push
+on:
+  release:
+    types: [published]
+  push:
+    branches: ['publish']
+    tags: ['*']
+  pull_request:
+
+jobs:
+  publish-on-dockerhub:
+    name: Publish Docker image on Docker Hub
+    runs-on: ubuntu-latest
+    environment: build
+    if: GitHub.ref == 'refs/heads/publish' || GitHub.event_name == 'release'
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v2
+
+      - name: Extract metadata from Git reference and GitHub events
+        id: meta
+        uses: docker/metadata-action@v3
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/sample
+          tags: |
+            type=raw,value=latest,enable=${{ endsWith(GitHub.ref, 'publish') }}
+            type=ref,event=tag
+          flavor: |
+            latest=false
+
+      - name: Login to DockerHub
+        if: GitHub.event_name != 'pull_request'
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_ACCESSTOKEN }}
+
+      - name: Build and publish
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          push: ${{ GitHub.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
